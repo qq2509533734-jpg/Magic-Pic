@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI智能珠子抠图 (预览+双导出)</title>
+    <style>
+        :root{--primary:#4f46e5;--bg:#f8fafc;--card:#fff;--border:#e2e8f0;--text:#1e293b}
+        *{box-sizing:border-box;margin:0;padding:0;outline:none;-webkit-tap-highlight-color:transparent}
+        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px;padding-bottom:80px}
+        .container{width:100%;max-width:600px}
+        h1{font-size:1.5rem;margin-bottom:8px;text-align:center}
+        p.desc{font-size:.85rem;color:#64748b;margin-bottom:20px;text-align:center;line-height:1.5}
+        
+        /* 设置面板 */
+        .settings-panel {background:var(--card);border:1px solid var(--border);border-radius:12px;padding:15px;margin-bottom:20px;box-shadow:0 2px 4px rgba(0,0,0,0.05)}
+        .setting-item {margin-bottom:16px;position:relative}
+        .setting-item:last-child {margin-bottom:0}
+        .setting-header {display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+        .setting-label {font-size:0.9rem;font-weight:600;color:#334155;pointer-events:none}
+        .setting-val {font-size:0.85rem;font-weight:700;color:var(--primary);background:#eef2ff;padding:2px 8px;border-radius:4px;pointer-events:none}
+        input[type=range] {width:100%;height:24px;background:transparent;appearance:none;cursor:pointer;margin:0;z-index:10;position:relative}
+        input[type=range]::-webkit-slider-runnable-track {height:6px;background:#e2e8f0;border-radius:3px}
+        input[type=range]::-webkit-slider-thumb {appearance:none;width:20px;height:20px;background:var(--primary);border-radius:50%;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);margin-top:-7px;transition:transform 0.1s}
+        input[type=range]:active::-webkit-slider-thumb {transform:scale(1.2)}
+        .input-group {display:flex;gap:10px;align-items:center}
+        .size-input {width:80px;padding:6px;border:1px solid var(--border);border-radius:6px;text-align:center;font-size:0.9rem}
+        .setting-hint {font-size:0.75rem;color:#94a3b8;margin-top:4px;line-height:1.4;pointer-events:none}
+
+        /* 上传与进度 */
+        .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:#fff;padding:10px 24px;border-radius:20px;font-size:.9rem;z-index:2000;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+        .toast.show{opacity:1}
+        .upload-zone{border:2px dashed var(--border);border-radius:12px;padding:30px 20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--card);margin-bottom:20px}
+        .upload-zone:hover,.upload-zone.dragover{border-color:var(--primary);background:#eef2ff}
+        .upload-zone input{display:none}
+        .upload-icon{font-size:2rem;margin-bottom:10px}
+        .upload-text{font-size:.95rem;color:#475569}
+        .upload-hint{font-size:.75rem;color:#94a3b8;margin-top:5px}
+        .progress-wrap{width:100%;margin-bottom:20px;display:none}
+        .progress-label{font-size:.8rem;color:#64748b;margin-bottom:4px;display:flex;justify-content:space-between}
+        .progress-track{height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden}
+        .progress-bar{height:100%;background:var(--primary);width:0%;transition:width .3s}
+
+        /* 结果网格 */
+        .results{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;width:100%}
+        .result-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px;display:flex;flex-direction:column;align-items:center;transition:transform 0.2s}
+        .result-card:hover{transform:translateY(-2px);box-shadow:0 4px 6px rgba(0,0,0,0.05)}
+        
+        /* 【新增】图片预览样式 */
+        .img-wrapper {
+            width: 100%; aspect-ratio: 1; position: relative; cursor: zoom-in; overflow: hidden; border-radius: 4px;
+            background-image: linear-gradient(45deg,#f1f5f9 25%,transparent 25%),linear-gradient(-45deg,#f1f5f9 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#f1f5f9 75%),linear-gradient(-45deg,transparent 75%,#f1f5f9 75%);
+            background-size:10px 10px; background-position:0 0,0 5px,5px -5px,-5px 0;
+        }
+        .img-wrapper img { width:100%; height:100%; object-fit:contain; transition: transform 0.3s; }
+        .img-wrapper:hover img { transform: scale(1.05); }
+        .zoom-icon {
+            position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; 
+            background: rgba(0,0,0,0.5); border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 12px; pointer-events: none; opacity: 0; transition: opacity 0.2s;
+        }
+        .img-wrapper:hover .zoom-icon { opacity: 1; }
+
+        .card-info { font-size:0.7rem; color:#64748b; margin-top:4px; text-align: center; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+        .card-actions{display:flex;gap:4px;width:100%;margin-top:6px}
+        .card-btn{flex:1;padding:6px;border:none;border-radius:4px;font-size:.75rem;cursor:pointer;color:#fff}
+        .btn-save{background:var(--primary)}
+        .btn-del{background:#ef4444}
+        .card-btn:active{opacity:.8}
+
+        /* 底部栏 */
+        .bottom-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,0.95);backdrop-filter:blur(10px);padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:10px;z-index:100;justify-content: center;}
+        .bottom-inner { width: 100%; max-width: 600px; display: flex; gap: 10px; }
+        .btn{flex:1;padding:12px;border:none;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px}
+        .btn-primary{background:var(--primary);color:#fff}
+        .btn-primary:disabled{background:#cbd5e1;cursor:not-allowed}
+        .btn-secondary{background:#0f172a;color:#fff}
+        .btn-secondary:disabled{background:#cbd5e1;cursor:not-allowed}
+        .btn-outline{background:#fff;color:#1e293b;border:1px solid var(--border);flex: 0 0 auto; padding: 12px 16px;}
+
+        /* 【新增】大图预览模态框 */
+        .lightbox {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 3000; 
+            display: flex; align-items: center; justify-content: center; 
+            opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .lightbox.active { opacity: 1; pointer-events: auto; }
+        .lightbox img { max-width: 95vw; max-height: 90vh; object-fit: contain; border-radius: 4px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .lightbox-close {
+            position: absolute; top: 15px; right: 15px; width: 40px; height: 40px; 
+            background: rgba(255,255,255,0.2); border: none; border-radius: 50%; 
+            color: #fff; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .lightbox-info { position: absolute; bottom: 20px; color: rgba(255,255,255,0.8); font-size: 0.9rem; }
+
+        @media(max-width:480px){.results{grid-template-columns:repeat(3,1fr);gap:8px}.upload-zone{padding:20px 15px}}
+    </style>
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+
+<!-- 大图预览层 -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+    <button class="lightbox-close" onclick="closeLightbox(event)">×</button>
+    <img id="lightbox-img" src="" alt="Preview">
+    <div class="lightbox-info" id="lightbox-info"></div>
+</div>
+
+<div class="container">
+    <h1>智能珠子抠图</h1>
+    <p class="desc">RMBG-1.4 模型 · 点击小图可预览 · 支持双模式导出</p>
+
+    <!-- 设置面板 -->
+    <div class="settings-panel">
+        <div class="setting-item">
+            <div class="setting-header">
+                <span class="setting-label">导出最大边长 (px)</span>
+                <span class="setting-val" id="val-size">100</span>
+            </div>
+            <div class="input-group">
+                <input type="range" id="range-size" min="50" max="2000" step="10" value="100">
+                <input type="number" id="input-size" class="size-input" value="100" min="50" max="4000">
+            </div>
+            <div class="setting-hint">保持原始比例，限制最长边像素</div>
+        </div>
+        <div class="setting-item">
+            <div class="setting-header">
+                <span class="setting-label">边缘平滑度 (羽化)</span>
+                <span class="setting-val" id="val-smooth">0</span>
+            </div>
+            <input type="range" id="range-smooth" min="0" max="10" step="1" value="0">
+            <div class="setting-hint">0为锐利边缘(适合珠子)，数值越大边缘越柔和</div>
+        </div>
+        <div class="setting-item">
+            <div class="setting-header">
+                <span class="setting-label">抠图阈值 (灵敏度)</span>
+                <span class="setting-val" id="val-thresh">0.50</span>
+            </div>
+            <input type="range" id="range-thresh" min="0.05" max="0.95" step="0.01" value="0.50">
+            <div class="setting-hint">降低保留更多细节，升高去除更多背景噪点</div>
+        </div>
+    </div>
+
+    <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" multiple accept="image/*">
+        <div class="upload-icon">📁</div>
+        <div class="upload-text">点击或拖拽上传图片</div>
+        <div class="upload-hint">支持 JPG/PNG/WebP · 本地AI处理</div>
+    </div>
+
+    <div class="progress-wrap" id="progressWrap">
+        <div class="progress-label"><span id="progressText">准备中...</span><span id="progressPct">0%</span></div>
+        <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+    </div>
+
+    <div class="results" id="results"></div>
+</div>
+
+<!-- 【修改】底部双按钮布局 -->
+<div class="bottom-bar">
+    <div class="bottom-inner">
+        <button class="btn btn-outline" onclick="clearResults()">清空</button>
+        <button class="btn btn-primary" id="saveCurrentBtn" disabled onclick="saveCurrent()">
+            保存当前
+        </button>
+        <button class="btn btn-secondary" id="batchSaveBtn" disabled onclick="batchSave()">
+            打包ZIP (<span id="zipCount">0</span>)
+        </button>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+<script>
+// ==================== 配置与状态 ====================
+const CONFIG = { MODEL_URLS: ['./model.onnx'], INPUT_SIZE: 1024 };
+let RUNTIME_CONFIG = { outputMaxSize: 100, smoothRadius: 0, threshold: 0.50 };
+let session = null;
+let processedFiles = [];
+
+// ==================== UI 绑定 ====================
+const $ = id => document.getElementById(id);
+
+function bindSetting(rangeId, inputId, valId, configKey, isFloat = false) {
+    const rangeEl = $(rangeId), inputEl = inputId ? $(inputId) : null, valEl = $(valId);
+    if (!rangeEl || !valEl) return;
+    const updateValue = (rawVal) => {
+        let num = isFloat ? parseFloat(rawVal) : parseInt(rawVal, 10);
+        const min = isFloat ? parseFloat(rangeEl.min) : parseInt(rangeEl.min);
+        const max = isFloat ? parseFloat(rangeEl.max) : parseInt(rangeEl.max);
+        if (isNaN(num)) num = min;
+        num = Math.max(min, Math.min(max, num));
+        RUNTIME_CONFIG[configKey] = num;
+        valEl.textContent = isFloat ? num.toFixed(2) : num;
+        if (document.activeElement !== rangeEl) rangeEl.value = num;
+        if (inputEl && document.activeElement !== inputEl) inputEl.value = num;
+    };
+    const handler = (e) => updateValue(e.target.value);
+    rangeEl.addEventListener('input', handler);
+    rangeEl.addEventListener('change', handler);
+    if (inputEl) { inputEl.addEventListener('input', handler); inputEl.addEventListener('change', handler); }
+    updateValue(rangeEl.value);
+}
+
+bindSetting('range-size', 'input-size', 'val-size', 'outputMaxSize', false);
+bindSetting('range-smooth', null, 'val-smooth', 'smoothRadius', false);
+bindSetting('range-thresh', null, 'val-thresh', 'threshold', true);
+
+// ==================== 工具函数 ====================
+const showToast = (msg, dur = 2500) => {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), dur);
+};
+const setProgress = (text, pct) => {
+    const w = $('progressWrap');
+    if (pct >= 0) { w.style.display = 'block'; $('progressBar').style.width = pct+'%'; $('progressPct').textContent = Math.round(pct)+'%'; }
+    else { w.style.display = 'none'; }
+    if (text) $('progressText').textContent = text;
+};
+
+// ==================== 盒模糊算法 ====================
+function applyBoxBlur(imageData, radius) {
+    if (radius <= 0) return imageData;
+    const w = imageData.width, h = imageData.height, data = imageData.data;
+    const alphaBuf = new Uint8Array(w * h);
+    for(let i=0; i<w*h; i++) alphaBuf[i] = data[i*4+3];
+    const temp = new Uint8Array(w * h);
+    for(let y=0; y<h; y++) for(let x=0; x<w; x++) {
+        let sum=0, c=0; for(let k=-radius;k<=radius;k++){const nx=x+k;if(nx>=0&&nx<w){sum+=alphaBuf[y*w+nx];c++;}} temp[y*w+x]=sum/c;
+    }
+    for(let x=0; x<w; x++) for(let y=0; y<h; y++) {
+        let sum=0, c=0; for(let k=-radius;k<=radius;k++){const ny=y+k;if(ny>=0&&ny<h){sum+=temp[ny*w+x];c++;}} data[(y*w+x)*4+3]=sum/c;
+    }
+    return imageData;
+}
+
+// ==================== 模型加载 ====================
+async function loadModel() {
+    if (session) return session;
+    const CACHE_KEY = 'rmbg14_onnx_cache_v3';
+    try {
+        const cached = await new Promise(resolve => {
+            const req = indexedDB.open('onnx_cache_db', 1);
+            req.onupgradeneeded = e => e.target.result.createObjectStore('models');
+            req.onsuccess = () => { const tx=req.result.transaction('models','readonly');const r=tx.objectStore('models').get(CACHE_KEY);r.onsuccess=()=>resolve(r.result);r.onerror=()=>resolve(null); };
+            req.onerror = () => resolve(null);
+        });
+        if (cached) { setProgress('缓存加载...', 80); session = await ort.InferenceSession.create(cached, {executionProviders:['wasm']}); return session; }
+    } catch(e) {}
+    let lastErr;
+    for (const url of CONFIG.MODEL_URLS) {
+        try {
+            setProgress('下载模型...', 10);
+            const resp = await fetch(url); if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const buf = await resp.arrayBuffer();
+            try { const req=indexedDB.open('onnx_cache_db',1);req.onupgradeneeded=e=>e.target.result.createObjectStore('models');req.onsuccess=()=>{const tx=req.result.transaction('models','readwrite');tx.objectStore('models').put(buf,CACHE_KEY);} } catch(e){}
+            setProgress('初始化引擎...', 95);
+            session = await ort.InferenceSession.create(buf, {executionProviders:['wasm']}); return session;
+        } catch(e) { lastErr = e; }
+    }
+    throw new Error(`模型加载失败: ${lastErr?.message}`);
+}
+
+// ==================== AI 抠图核心 ====================
+async function removeBackground(imgEl, settings) {
+    const s = await loadModel(); const SIZE = CONFIG.INPUT_SIZE;
+    const { outputMaxSize, smoothRadius, threshold } = settings;
+    const preCanvas = document.createElement('canvas'); preCanvas.width = SIZE; preCanvas.height = SIZE;
+    const pCtx = preCanvas.getContext('2d'); pCtx.fillStyle = '#fff'; pCtx.fillRect(0,0,SIZE,SIZE);
+    const scale = Math.min(SIZE/imgEl.width, SIZE/imgEl.height);
+    const dw = Math.round(imgEl.width*scale), dh = Math.round(imgEl.height*scale);
+    const dx = Math.round((SIZE-dw)/2), dy = Math.round((SIZE-dh)/2);
+    pCtx.drawImage(imgEl, dx, dy, dw, dh);
+    const imgData = pCtx.getImageData(0,0,SIZE,SIZE).data;
+    const tensor = new ort.Tensor('float32', new Float32Array(SIZE*SIZE*3), [1,3,SIZE,SIZE]);
+    for(let i=0,j=0;i<imgData.length;i+=4,j++){ tensor.data[j]=imgData[i]/255; tensor.data[j+SIZE*SIZE]=imgData[i+1]/255; tensor.data[j+SIZE*SIZE*2]=imgData[i+2]/255; }
+    const feeds = {}; feeds[s.inputNames[0]] = tensor;
+    const output = await s.run(feeds); const mask = output[s.outputNames[0]].data;
+    const outCanvas = document.createElement('canvas'); outCanvas.width = dw; outCanvas.height = dh;
+    const oCtx = outCanvas.getContext('2d', {willReadFrequently:true});
+    oCtx.drawImage(preCanvas, dx, dy, dw, dh, 0, 0, dw, dh);
+    const outImg = oCtx.getImageData(0,0,dw,dh);
+    for(let y=0;y<dh;y++) for(let x=0;x<dw;x++){
+        const mx=x+dx, my=y+dy, alphaRaw=mask[my*SIZE+mx];
+        const sharp = 1/(1+Math.exp(-10*(alphaRaw-0.5)));
+        outImg.data[(y*dw+x)*4+3] = sharp > threshold ? sharp * 255 : 0;
+    }
+    if (smoothRadius > 0) applyBoxBlur(outImg, smoothRadius);
+    oCtx.putImageData(outImg, 0, 0);
+    const finalScale = Math.min(outputMaxSize/Math.max(dw,dh), 1);
+    const fw = Math.round(dw*finalScale), fh = Math.round(dh*finalScale);
+    let finalCanvas = outCanvas;
+    if (fw !== dw || fh !== dh) { finalCanvas=document.createElement('canvas');finalCanvas.width=fw;finalCanvas.height=fh;finalCanvas.getContext('2d').drawImage(outCanvas,0,0,fw,fh); }
+    return new Promise(res => finalCanvas.toBlob(b => res({blob:b, url:URL.createObjectURL(b), width:fw, height:fh}), 'image/png'));
+}
+
+// ==================== 业务逻辑 ====================
+const uploadZone=$('uploadZone'), fileInput=$('fileInput'), resultsGrid=$('results');
+uploadZone.addEventListener('click',()=>fileInput.click());
+uploadZone.addEventListener('dragover',e=>{e.preventDefault();uploadZone.classList.add('dragover')});
+uploadZone.addEventListener('dragleave',()=>uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop',e=>{e.preventDefault();uploadZone.classList.remove('dragover');handleFiles(e.dataTransfer.files)});
+fileInput.addEventListener('change',e=>handleFiles(e.target.files));
+
+async function handleFiles(files) {
+    const valid = Array.from(files).filter(f=>f.type.startsWith('image/'));
+    if(!valid.length) return showToast('❌ 请选择图片文件');
+    showToast(`🔄 处理 ${valid.length} 张...`, 3000);
+    $('batchSaveBtn').disabled = true; $('saveCurrentBtn').disabled = true;
+    setProgress('加载模型...', 0);
+    try { await loadModel(); } catch(e) { showToast('❌ '+e.message, 5000); setProgress('',-1); return; }
+    let success=0; const currentSettings = {...RUNTIME_CONFIG};
+    for(let i=0;i<valid.length;i++){
+        try{
+            setProgress(`处理 (${i+1}/${valid.length})`, (i/valid.length)*100);
+            const img=new Image(); await new Promise((r,j)=>{img.onload=r;img.onerror=j;img.src=URL.createObjectURL(valid[i])});
+            const result=await removeBackground(img, currentSettings);
+            processedFiles.push({ name: valid[i].name.replace(/\.[^.]+$/,'')+'_cut.png', ...result });
+            appendCard(processedFiles.length-1); success++;
+        }catch(e){showToast(`❌ ${valid[i].name}: ${e.message}`);}
+    }
+    setProgress(`✅ 完成 ${success}/${valid.length}`, 100);
+    setTimeout(()=>setProgress('',-1),1500);
+    updateButtons(); showToast(`✅ 成功 ${success} 张`); fileInput.value='';
+}
+
+// 【修改】卡片渲染：增加点击预览功能
+function appendCard(idx){
+    const item=processedFiles[idx];
+    const card=document.createElement('div'); card.className='result-card';
+    card.innerHTML=`
+        <div class="img-wrapper" onclick="openLightbox(${idx})">
+            <img src="${item.url}" alt="result" loading="lazy">
+            <div class="zoom-icon">🔍</div>
+        </div>
+        <div class="card-info">${item.width}×${item.height} · ${item.name}</div>
+        <div class="card-actions">
+            <button class="card-btn btn-save" onclick="saveSingle(${idx})">保存</button>
+            <button class="card-btn btn-del" onclick="deleteSingle(${idx})">删除</button>
+        </div>`;
+    resultsGrid.appendChild(card);
+}
+
+// ==================== 【新增】大图预览逻辑 ====================
+function openLightbox(idx) {
+    const item = processedFiles[idx];
+    if (!item) return;
+    const lb = $('lightbox');
+    const img = $('lightbox-img');
+    const info = $('lightbox-info');
+    
+    img.src = item.url;
+    info.textContent = `${item.name} | ${item.width} × ${item.height}`;
+    lb.classList.add('active');
+    document.body.style.overflow = 'hidden'; // 防止背景滚动
+}
+
+function closeLightbox(e) {
+    // 如果点击的是图片本身，不关闭（除非是点击关闭按钮或遮罩）
+    if (e && e.target.tagName === 'IMG') return;
+    $('lightbox').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+// ESC 键关闭预览
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeLightbox();
+});
+
+// ==================== 导出与操作 ====================
+function saveSingle(i){
+    const a=document.createElement('a'); a.href=processedFiles[i].url; a.download=processedFiles[i].name; a.click();
+    showToast('💾 '+processedFiles[i].name);
+}
+
+// 【新增】保存当前（最新一张）
+function saveCurrent() {
+    if (!processedFiles.length) return;
+    const lastIdx = processedFiles.length - 1;
+    saveSingle(lastIdx);
+}
+
+function deleteSingle(i){
+    URL.revokeObjectURL(processedFiles[i].url);
+    processedFiles.splice(i,1); renderAll(); updateButtons(); showToast('🗑️ 已删除');
+}
+
+function renderAll(){ resultsGrid.innerHTML=''; processedFiles.forEach((_,i)=>appendCard(i)); }
+
+// 【修改】按钮状态更新
+function updateButtons(){
+    const count = processedFiles.length;
+    $('zipCount').textContent = count;
+    $('batchSaveBtn').disabled = count === 0;
+    $('saveCurrentBtn').disabled = count === 0;
+}
+
+async function batchSave(){
+    if(!processedFiles.length)return;
+    showToast('📦 打包ZIP中...');
+    const zip=new JSZip();
+    processedFiles.forEach(f=>zip.file(f.name,f.blob));
+    const blob=await zip.generateAsync({type:'blob'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`AI_Cutout_${Date.now()}.zip`; a.click();
+    showToast('✅ ZIP下载已开始');
+}
+
+function clearResults(){
+    if(!processedFiles.length)return;
+    if(!confirm('确定清空所有结果？'))return;
+    processedFiles.forEach(f=>URL.revokeObjectURL(f.url));
+    processedFiles=[]; resultsGrid.innerHTML=''; updateButtons(); setProgress('',-1); showToast('🗑️ 已清空');
+}
+</script>
+</body>
+</html>
