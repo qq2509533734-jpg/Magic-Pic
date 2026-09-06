@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI智能珠子抠图 (HF托管+预览+双导出)</title>
+    <title>AI智能珠子抠图 (预览+双导出)</title>
     <style>
         :root{--primary:#4f46e5;--bg:#f8fafc;--card:#fff;--border:#e2e8f0;--text:#1e293b}
         *{box-sizing:border-box;margin:0;padding:0;outline:none;-webkit-tap-highlight-color:transparent}
@@ -46,7 +47,7 @@
         .result-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px;display:flex;flex-direction:column;align-items:center;transition:transform 0.2s}
         .result-card:hover{transform:translateY(-2px);box-shadow:0 4px 6px rgba(0,0,0,0.05)}
         
-        /* 图片预览样式 */
+        /* 【新增】图片预览样式 */
         .img-wrapper {
             width: 100%; aspect-ratio: 1; position: relative; cursor: zoom-in; overflow: hidden; border-radius: 4px;
             background-image: linear-gradient(45deg,#f1f5f9 25%,transparent 25%),linear-gradient(-45deg,#f1f5f9 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#f1f5f9 75%),linear-gradient(-45deg,transparent 75%,#f1f5f9 75%);
@@ -78,7 +79,7 @@
         .btn-secondary:disabled{background:#cbd5e1;cursor:not-allowed}
         .btn-outline{background:#fff;color:#1e293b;border:1px solid var(--border);flex: 0 0 auto; padding: 12px 16px;}
 
-        /* 大图预览模态框 */
+        /* 【新增】大图预览模态框 */
         .lightbox {
             position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 3000; 
             display: flex; align-items: center; justify-content: center; 
@@ -108,14 +109,14 @@
 </div>
 
 <div class="container">
-    <h1>💎 AI智能珠子抠图</h1>
+    <h1>智能珠子抠图</h1>
     <p class="desc">RMBG-1.4 模型 · 点击小图可预览 · 支持双模式导出</p>
 
     <!-- 设置面板 -->
     <div class="settings-panel">
         <div class="setting-item">
             <div class="setting-header">
-                <span class="setting-label">📐 导出最大边长 (px)</span>
+                <span class="setting-label">导出最大边长 (px)</span>
                 <span class="setting-val" id="val-size">100</span>
             </div>
             <div class="input-group">
@@ -126,7 +127,7 @@
         </div>
         <div class="setting-item">
             <div class="setting-header">
-                <span class="setting-label">🌫️ 边缘平滑度 (羽化)</span>
+                <span class="setting-label">边缘平滑度 (羽化)</span>
                 <span class="setting-val" id="val-smooth">0</span>
             </div>
             <input type="range" id="range-smooth" min="0" max="10" step="1" value="0">
@@ -134,7 +135,7 @@
         </div>
         <div class="setting-item">
             <div class="setting-header">
-                <span class="setting-label">✂️ 抠图阈值 (灵敏度)</span>
+                <span class="setting-label">抠图阈值 (灵敏度)</span>
                 <span class="setting-val" id="val-thresh">0.50</span>
             </div>
             <input type="range" id="range-thresh" min="0.05" max="0.95" step="0.01" value="0.50">
@@ -143,10 +144,10 @@
     </div>
 
     <div class="upload-zone" id="uploadZone">
-        <input type="file" id="fileInput" multiple accept="image/*">
+        <input type="file" id="fileInput" multiple accept="image/*,.heic,.heif,.heifs,.avif,.svg">
         <div class="upload-icon">📁</div>
         <div class="upload-text">点击或拖拽上传图片</div>
-        <div class="upload-hint">支持 JPG/PNG/WebP · 本地AI处理</div>
+        <div class="upload-hint">支持 JPG/PNG/WebP/HEIC/HEIF/AVIF/SVG · 本地AI处理 · 打开浏览器控制台查看HEIC诊断信息</div>
     </div>
 
     <div class="progress-wrap" id="progressWrap">
@@ -157,34 +158,63 @@
     <div class="results" id="results"></div>
 </div>
 
-<!-- 底部双按钮布局 -->
+<!-- 【修改】底部双按钮布局 -->
 <div class="bottom-bar">
     <div class="bottom-inner">
         <button class="btn btn-outline" onclick="clearResults()">清空</button>
         <button class="btn btn-primary" id="saveCurrentBtn" disabled onclick="saveCurrent()">
-            💾 保存当前
+            保存当前
         </button>
         <button class="btn btn-secondary" id="batchSaveBtn" disabled onclick="batchSave()">
-            📦 打包ZIP (<span id="zipCount">0</span>)
+            打包ZIP (<span id="zipCount">0</span>)
         </button>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jsZip.min.js"></script>
+<!-- 【新增】HEIC/HEIF 格式转换库 -->
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" onerror="loadHeicFallback()"></script>
+<script>
+// 多 CDN 源加载 heic2any，第一个失败则尝试其他源
+function loadHeicFallback() {
+    console.warn('[HEIC] jsdelivr 加载失败，尝试 unpkg...');
+    var s = document.createElement('script');
+    s.src = 'https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js';
+    s.onload = function() { console.log('[HEIC] unpkg 加载成功'); HEIC2ANY_AVAILABLE = typeof heic2any === 'function'; runStartupDiagnostic(); };
+    s.onerror = function() {
+        console.warn('[HEIC] unpkg 也失败，尝试 cdnjs...');
+        var s2 = document.createElement('script');
+        s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js';
+        s2.onload = function() { console.log('[HEIC] cdnjs 加载成功'); HEIC2ANY_AVAILABLE = typeof heic2any === 'function'; runStartupDiagnostic(); };
+        s2.onerror = function() {
+            console.error('[HEIC] 所有 CDN 源均失败，HEIC 转换将不可用');
+            HEIC2ANY_AVAILABLE = false;
+            runStartupDiagnostic();
+        };
+        document.head.appendChild(s2);
+    };
+    document.head.appendChild(s);
+}
+// 如果第一个脚本加载成功，也会执行 runStartupDiagnostic
+var _origHeic2anyLoad = null;
+var _checkInterval = setInterval(function() {
+    if (typeof heic2any === 'function') {
+        HEIC2ANY_AVAILABLE = true;
+        clearInterval(_checkInterval);
+        runStartupDiagnostic();
+    }
+}, 100);
+setTimeout(function() { clearInterval(_checkInterval); if (!HEIC2ANY_AVAILABLE) runStartupDiagnostic(); }, 8000);
+</script>
 
 <script>
 // ==================== 配置与状态 ====================
-const CONFIG = { 
-    MODEL_URLS: [
-        'https://github.com/qq2509533734-jpg/Magic-Pic/releases/download/v1.0/model.onnx',
-        './model.onnx'
-    ], 
-    INPUT_SIZE: 1024 
-};
+const CONFIG = { MODEL_URLS: ['./model.onnx'], INPUT_SIZE: 1024 };
 let RUNTIME_CONFIG = { outputMaxSize: 100, smoothRadius: 0, threshold: 0.50 };
 let session = null;
 let processedFiles = [];
+var HEIC2ANY_AVAILABLE = false;
 
 // ==================== UI 绑定 ====================
 const $ = id => document.getElementById(id);
@@ -226,6 +256,112 @@ const setProgress = (text, pct) => {
     if (text) $('progressText').textContent = text;
 };
 
+// ==================== HEIC/HEIF 格式检测 ====================
+// 判断文件是否为 HEIC/HEIF 格式（三层检测：魔数 > 扩展名 > MIME类型）
+function isHeicFile(file) {
+    // 第1层：魔数检测（最可靠，不依赖扩展名和MIME）
+    if (file.size >= 12) {
+        const bytes = new Uint8Array(file.slice(0, 12));
+        // ftyp 盒子：字节偏移 4-7 应为 "ftyp"
+        if (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
+            // 检查品牌名是否包含 heic
+            const brand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+            if (brand.toLowerCase().includes('heic') || brand.toLowerCase().includes('heif')) {
+                return true;
+            }
+        }
+    }
+    // 第2层：扩展名检测
+    const heicExts = ['.heic', '.heif', '.heifs'];
+    const dot = file.name.lastIndexOf('.');
+    if (dot > 0) {
+        const ext = file.name.substring(dot).toLowerCase();
+        if (heicExts.includes(ext)) return true;
+    }
+    // 第3层：MIME 类型检测
+    const heicTypes = ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'];
+    if (heicTypes.includes(file.type)) return true;
+    return false;
+}
+
+// 将 HEIC 文件转换为 PNG Blob（多层降级策略）
+async function convertHeicToPng(file) {
+    console.log('[HEIC] 开始转换文件:', file.name, '大小:', file.size, 'MIME:', file.type);
+    
+    // 策略1：使用 heic2any 库
+    if (HEIC2ANY_AVAILABLE) {
+        try {
+            console.log('[HEIC] 策略1: 使用 heic2any 库转换...');
+            const result = await heic2any({ blob: file, toType: 'image/png' });
+            if (result instanceof Blob) {
+                console.log('[HEIC] heic2any 转换成功, blob大小:', result.size);
+                return result;
+            } else if (Array.isArray(result) && result.length > 0 && result[0] instanceof Blob) {
+                console.log('[HEIC] heic2any 转换成功(数组), blob大小:', result[0].size);
+                return result[0];
+            }
+            throw new Error('heic2any返回了未知格式');
+        } catch(e) {
+            console.warn('[HEIC] heic2any 转换失败:', e.message);
+            // 继续降级
+        }
+    } else {
+        console.warn('[HEIC] heic2any 库不可用');
+    }
+    
+    // 策略2：使用 createImageBitmap（Chrome/Edge 原生支持 HEIC 解码）
+    try {
+        console.log('[HEIC] 策略2: 使用 createImageBitmap 原生解码...');
+        const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        return new Promise((resolve, reject) => {
+            canvas.toBlob(b => {
+                if (b) {
+                    console.log('[HEIC] createImageBitmap 转换成功, blob大小:', b.size);
+                    resolve(b);
+                } else {
+                    reject(new Error('createImageBitmap 转 Blob 失败'));
+                }
+            }, 'image/png');
+        });
+    } catch(e) {
+        console.warn('[HEIC] createImageBitmap 失败:', e.message);
+    }
+    
+    // 策略3：使用 Image + Canvas（Safari 原生支持）
+    try {
+        console.log('[HEIC] 策略3: 使用 Image 原生解码...');
+        return await fallbackLoadAsImage(file);
+    } catch(e) {
+        console.error('[HEIC] 所有策略均失败');
+        throw new Error('当前浏览器不支持 HEIC 格式解码，请转换为 JPG/PNG 后再试');
+    }
+}
+
+// 降级方案：使用浏览器原生方式加载 HEIC
+function fallbackLoadAsImage(file) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            canvas.getContext('2d').drawImage(img, 0, 0);
+            canvas.toBlob(b => {
+                if (b) resolve(b);
+                else reject(new Error('降级转换失败'));
+            }, 'image/png');
+        };
+        img.onerror = () => reject(new Error('浏览器不支持直接加载此格式，请尝试 Chrome 或 Edge 浏览器'));
+        img.src = URL.createObjectURL(file);
+    });
+}
+
 // ==================== 盒模糊算法 ====================
 function applyBoxBlur(imageData, radius) {
     if (radius <= 0) return imageData;
@@ -246,8 +382,6 @@ function applyBoxBlur(imageData, radius) {
 async function loadModel() {
     if (session) return session;
     const CACHE_KEY = 'rmbg14_onnx_cache_v3';
-    
-    // 1. 尝试从 IndexedDB 读取缓存
     try {
         const cached = await new Promise(resolve => {
             const req = indexedDB.open('onnx_cache_db', 1);
@@ -255,93 +389,104 @@ async function loadModel() {
             req.onsuccess = () => { const tx=req.result.transaction('models','readonly');const r=tx.objectStore('models').get(CACHE_KEY);r.onsuccess=()=>resolve(r.result);r.onerror=()=>resolve(null); };
             req.onerror = () => resolve(null);
         });
-        if (cached) { 
-            setProgress('缓存加载...', 80); 
-            session = await ort.InferenceSession.create(cached, {executionProviders:['wasm']}); 
-            return session; 
-        }
-    } catch(e) { console.warn('Cache read failed', e); }
-
-    // 2. 尝试从网络下载 (轮询 URLs)
+        if (cached) { setProgress('缓存加载...', 80); session = await ort.InferenceSession.create(cached, {executionProviders:['wasm']}); return session; }
+    } catch(e) {}
     let lastErr;
     for (const url of CONFIG.MODEL_URLS) {
         try {
             setProgress('下载模型...', 10);
-            const resp = await fetch(url); 
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            
+            const resp = await fetch(url); if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const buf = await resp.arrayBuffer();
-            
-            // 存入缓存
-            try { 
-                const req=indexedDB.open('onnx_cache_db',1);
-                req.onupgradeneeded=e=>e.target.result.createObjectStore('models');
-                req.onsuccess=()=>{const tx=req.result.transaction('models','readwrite');tx.objectStore('models').put(buf,CACHE_KEY);} 
-            } catch(e){}
-            
+            try { const req=indexedDB.open('onnx_cache_db',1);req.onupgradeneeded=e=>e.target.result.createObjectStore('models');req.onsuccess=()=>{const tx=req.result.transaction('models','readwrite');tx.objectStore('models').put(buf,CACHE_KEY);} } catch(e){}
             setProgress('初始化引擎...', 95);
-            session = await ort.InferenceSession.create(buf, {executionProviders:['wasm']}); 
-            return session;
-        } catch(e) { 
-            console.warn(`URL failed: ${url}`, e);
-            lastErr = e; 
-        }
+            session = await ort.InferenceSession.create(buf, {executionProviders:['wasm']}); return session;
+        } catch(e) { lastErr = e; }
     }
-    throw new Error(`模型加载失败: ${lastErr?.message || '所有源均不可用'}`);
+    throw new Error(`模型加载失败: ${lastErr?.message}`);
 }
 
 // ==================== AI 抠图核心 ====================
 async function removeBackground(imgEl, settings) {
     const s = await loadModel(); const SIZE = CONFIG.INPUT_SIZE;
     const { outputMaxSize, smoothRadius, threshold } = settings;
-    
-    // 预处理
     const preCanvas = document.createElement('canvas'); preCanvas.width = SIZE; preCanvas.height = SIZE;
     const pCtx = preCanvas.getContext('2d'); pCtx.fillStyle = '#fff'; pCtx.fillRect(0,0,SIZE,SIZE);
     const scale = Math.min(SIZE/imgEl.width, SIZE/imgEl.height);
     const dw = Math.round(imgEl.width*scale), dh = Math.round(imgEl.height*scale);
     const dx = Math.round((SIZE-dw)/2), dy = Math.round((SIZE-dh)/2);
     pCtx.drawImage(imgEl, dx, dy, dw, dh);
-    
     const imgData = pCtx.getImageData(0,0,SIZE,SIZE).data;
     const tensor = new ort.Tensor('float32', new Float32Array(SIZE*SIZE*3), [1,3,SIZE,SIZE]);
-    for(let i=0,j=0;i<imgData.length;i+=4,j++){ 
-        tensor.data[j]=imgData[i]/255; 
-        tensor.data[j+SIZE*SIZE]=imgData[i+1]/255; 
-        tensor.data[j+SIZE*SIZE*2]=imgData[i+2]/255; 
-    }
-    
+    for(let i=0,j=0;i<imgData.length;i+=4,j++){ tensor.data[j]=imgData[i]/255; tensor.data[j+SIZE*SIZE]=imgData[i+1]/255; tensor.data[j+SIZE*SIZE*2]=imgData[i+2]/255; }
     const feeds = {}; feeds[s.inputNames[0]] = tensor;
-    const output = await s.run(feeds); 
-    const mask = output[s.outputNames[0]].data;
-    
-    // 后处理
+    const output = await s.run(feeds); const mask = output[s.outputNames[0]].data;
     const outCanvas = document.createElement('canvas'); outCanvas.width = dw; outCanvas.height = dh;
     const oCtx = outCanvas.getContext('2d', {willReadFrequently:true});
     oCtx.drawImage(preCanvas, dx, dy, dw, dh, 0, 0, dw, dh);
     const outImg = oCtx.getImageData(0,0,dw,dh);
-    
     for(let y=0;y<dh;y++) for(let x=0;x<dw;x++){
         const mx=x+dx, my=y+dy, alphaRaw=mask[my*SIZE+mx];
         const sharp = 1/(1+Math.exp(-10*(alphaRaw-0.5)));
         outImg.data[(y*dw+x)*4+3] = sharp > threshold ? sharp * 255 : 0;
     }
     if (smoothRadius > 0) applyBoxBlur(outImg, smoothRadius);
-    
     oCtx.putImageData(outImg, 0, 0);
-    
-    // 缩放输出
     const finalScale = Math.min(outputMaxSize/Math.max(dw,dh), 1);
     const fw = Math.round(dw*finalScale), fh = Math.round(dh*finalScale);
     let finalCanvas = outCanvas;
-    if (fw !== dw || fh !== dh) { 
-        finalCanvas=document.createElement('canvas');
-        finalCanvas.width=fw;finalCanvas.height=fh;
-        finalCanvas.getContext('2d').drawImage(outCanvas,0,0,fw,fh); 
-    }
-    
+    if (fw !== dw || fh !== dh) { finalCanvas=document.createElement('canvas');finalCanvas.width=fw;finalCanvas.height=fh;finalCanvas.getContext('2d').drawImage(outCanvas,0,0,fw,fh); }
     return new Promise(res => finalCanvas.toBlob(b => res({blob:b, url:URL.createObjectURL(b), width:fw, height:fh}), 'image/png'));
 }
+
+
+// ==================== 启动诊断 ====================
+function runStartupDiagnostic() {
+    console.log('%c=== HEIC 导入诊断 ===', 'font-size:16px;font-weight:bold;color:#4f46e5');
+    console.log('heic2any 库可用:', HEIC2ANY_AVAILABLE);
+    console.log('createImageBitmap 支持:', typeof createImageBitmap === 'function');
+    console.log('IndexedDB 支持:', typeof indexedDB !== 'undefined');
+    console.log('File API 支持:', typeof File !== 'undefined');
+    console.log('Blob API 支持:', typeof Blob !== 'undefined');
+    
+    // 检测浏览器
+    const ua = navigator.userAgent;
+    if (ua.includes('Safari') && !ua.includes('Chrome')) {
+        console.log('浏览器: Safari (原生支持 HEIC)');
+    } else if (ua.includes('Chrome') || ua.includes('Chromium')) {
+        console.log('浏览器: Chrome/Chromium (createImageBitmap 可能支持 HEIC)');
+    } else if (ua.includes('Edge')) {
+        console.log('浏览器: Edge (createImageBitmap 可能支持 HEIC)');
+    } else if (ua.includes('Firefox')) {
+        console.log('浏览器: Firefox (不支持 HEIC 原生解码，必须依赖 heic2any 库)');
+    } else {
+        console.log('浏览器: 未知');
+    }
+    
+    // 检测协议
+    if (location.protocol === 'file:') {
+        console.warn('%c警告：正在使用 file:// 协议打开，CDN 资源可能无法加载！', 'color:#ef4444;font-size:14px');
+        console.warn('建议使用本地服务器运行，如：npx serve . 或 python3 -m http.server');
+    }
+    
+    console.log('%c==================', 'font-size:16px;font-weight:bold;color:#4f46e5');
+    
+    // 更新 UI 中的提示信息
+    const hintEl = document.querySelector('.upload-hint');
+    if (hintEl) {
+        if (HEIC2ANY_AVAILABLE) {
+            hintEl.textContent = '支持 JPG/PNG/WebP/HEIC/HEIF/AVIF · 本地AI处理 · HEIC自动转换';
+        } else {
+            hintEl.textContent = '支持 JPG/PNG/WebP/HEIC/HEIF/AVIF · 本地AI处理 · HEIC库加载中...';
+        }
+    }
+}
+
+// 如果 heic2any 已经加载成功（脚本同步执行），确保诊断运行
+if (typeof heic2any === 'function') {
+    HEIC2ANY_AVAILABLE = true;
+}
+// 延迟运行诊断，等待可能的异步加载
+setTimeout(runStartupDiagnostic, 2000);
 
 // ==================== 业务逻辑 ====================
 const uploadZone=$('uploadZone'), fileInput=$('fileInput'), resultsGrid=$('results');
@@ -352,38 +497,59 @@ uploadZone.addEventListener('drop',e=>{e.preventDefault();uploadZone.classList.r
 fileInput.addEventListener('change',e=>handleFiles(e.target.files));
 
 async function handleFiles(files) {
-    const valid = Array.from(files).filter(f=>f.type.startsWith('image/'));
-    if(!valid.length) return showToast('❌ 请选择图片文件');
+    const rawFiles = Array.from(files);
+    if(!rawFiles.length) return showToast('❌ 请选择图片文件');
     
-    showToast(`🔄 处理 ${valid.length} 张...`, 3000);
+    // 分离 HEIC 文件和其他图片文件
+    const heicFiles = rawFiles.filter(f => isHeicFile(f));
+    const normalFiles = rawFiles.filter(f => !isHeicFile(f) && f.type.startsWith('image/'));
+    
+    let allProcessedFiles = [];
+    
+    // 先处理普通图片
+    allProcessedFiles = allProcessedFiles.concat(normalFiles);
+    
+    // 再转换并处理 HEIC 图片
+    if (heicFiles.length > 0) {
+        console.log('[HEIC] 需要转换的 HEIC 文件数:', heicFiles.length);
+        console.log('[HEIC] heic2any 可用:', HEIC2ANY_AVAILABLE);
+        showToast('🔄 正在转换 HEIC 格式 (' + heicFiles.length + ' 张)...');
+        for (const heicFile of heicFiles) {
+            try {
+                const pngBlob = await convertHeicToPng(heicFile);
+                // 创建一个新的 File 对象，类型为 image/png
+                const pngFile = new File([pngBlob], heicFile.name.replace(/\.[^.]+$/, '') + '.png', { type: 'image/png' });
+                allProcessedFiles.push(pngFile);
+                console.log('[HEIC] 转换成功:', heicFile.name, '→', pngFile.name);
+            } catch(e) {
+                console.error('[HEIC] 转换失败:', heicFile.name, e.message);
+                showToast('❌ ' + heicFile.name + ' 转换失败: ' + e.message, 4000);
+            }
+        }
+    }
+    
+    if(!allProcessedFiles.length) return showToast('❌ 没有可处理的图片文件，请确认文件格式是否正确（支持 JPG/PNG/WebP/HEIC/HEIF/AVIF）', 4000);
+    
+    showToast('🔄 处理 ' + allProcessedFiles.length + ' 张...');
     $('batchSaveBtn').disabled = true; $('saveCurrentBtn').disabled = true;
     setProgress('加载模型...', 0);
-    
-    try { await loadModel(); } catch(e) { 
-        showToast('❌ '+e.message, 5000); 
-        setProgress('',-1); 
-        return; 
-    }
-    
+    try { await loadModel(); } catch(e) { showToast('❌ '+e.message, 5000); setProgress('',-1); return; }
     let success=0; const currentSettings = {...RUNTIME_CONFIG};
-    for(let i=0;i<valid.length;i++){
+    for(let i=0;i<allProcessedFiles.length;i++){
         try{
-            setProgress(`处理 (${i+1}/${valid.length})`, (i/valid.length)*100);
-            const img=new Image(); 
-            await new Promise((r,j)=>{img.onload=r;img.onerror=j;img.src=URL.createObjectURL(valid[i])});
-            
+            setProgress('处理 (' + (i+1) + '/' + allProcessedFiles.length + ')', (i/allProcessedFiles.length)*100);
+            const img=new Image(); await new Promise((r,j)=>{img.onload=r;img.onerror=j;img.src=URL.createObjectURL(allProcessedFiles[i])});
             const result=await removeBackground(img, currentSettings);
-            processedFiles.push({ name: valid[i].name.replace(/\.[^.]+$/,'')+'_cut.png', ...result });
+            processedFiles.push({ name: allProcessedFiles[i].name.replace(/\.[^.]+$/,'')+'_cut.png', ...result });
             appendCard(processedFiles.length-1); success++;
-        }catch(e){showToast(`❌ ${valid[i].name}: ${e.message}`);}
+        }catch(e){showToast('❌ ' + allProcessedFiles[i].name + ': ' + e.message);}
     }
-    
-    setProgress(`✅ 完成 ${success}/${valid.length}`, 100);
+    setProgress('✅ 完成 ' + success + '/' + allProcessedFiles.length, 100);
     setTimeout(()=>setProgress('',-1),1500);
-    updateButtons(); showToast(`✅ 成功 ${success} 张`); fileInput.value='';
+    updateButtons(); showToast('✅ 成功 ' + success + ' 张'); fileInput.value='';
 }
 
-// 卡片渲染：增加点击预览功能
+// 【修改】卡片渲染：增加点击预览功能
 function appendCard(idx){
     const item=processedFiles[idx];
     const card=document.createElement('div'); card.className='result-card';
@@ -400,7 +566,7 @@ function appendCard(idx){
     resultsGrid.appendChild(card);
 }
 
-// ==================== 大图预览逻辑 ====================
+// ==================== 【新增】大图预览逻辑 ====================
 function openLightbox(idx) {
     const item = processedFiles[idx];
     if (!item) return;
@@ -415,11 +581,13 @@ function openLightbox(idx) {
 }
 
 function closeLightbox(e) {
+    // 如果点击的是图片本身，不关闭（除非是点击关闭按钮或遮罩）
     if (e && e.target.tagName === 'IMG') return;
     $('lightbox').classList.remove('active');
     document.body.style.overflow = '';
 }
 
+// ESC 键关闭预览
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeLightbox();
 });
@@ -430,7 +598,7 @@ function saveSingle(i){
     showToast('💾 '+processedFiles[i].name);
 }
 
-// 保存当前（最新一张）
+// 【新增】保存当前（最新一张）
 function saveCurrent() {
     if (!processedFiles.length) return;
     const lastIdx = processedFiles.length - 1;
@@ -444,6 +612,7 @@ function deleteSingle(i){
 
 function renderAll(){ resultsGrid.innerHTML=''; processedFiles.forEach((_,i)=>appendCard(i)); }
 
+// 【修改】按钮状态更新
 function updateButtons(){
     const count = processedFiles.length;
     $('zipCount').textContent = count;
